@@ -45,6 +45,7 @@ func (s *Store) GetAllCafes(ctx context.Context) ([]Cafe, error) {
 		WHERE c.is_active = TRUE
 		ORDER BY c.created_at DESC
 	`)
+
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +119,7 @@ func (s *Store) GetCafeByID(ctx context.Context, id string) (Cafe, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Cafe{}, ErrCafeNotFound
 	}
+
 	if err != nil {
 		return Cafe{}, err
 	}
@@ -130,7 +132,6 @@ func (s *Store) GetOrCreateCafeByFSQID(
 	ctx context.Context,
 	place FoursquarePlace,
 ) (Cafe, error) {
-
 	if place.FSQID == "" {
 		return Cafe{}, errors.New("Foursquare ID is required")
 	}
@@ -204,8 +205,12 @@ func (s *Store) CreateCafe(ctx context.Context, cafe Cafe) (Cafe, error) {
 	return s.GetCafeByID(ctx, id)
 }
 
-// UpdateCafe updates an existing cafe.
-func (s *Store) UpdateCafe(ctx context.Context, id string, cafe Cafe) (Cafe, error) {
+// UpdateCafe updates an active cafe.
+func (s *Store) UpdateCafe(
+	ctx context.Context,
+	id string,
+	cafe Cafe,
+) (Cafe, error) {
 	result, err := s.DB.Exec(ctx, `
 		UPDATE cafes
 		SET
@@ -218,7 +223,7 @@ func (s *Store) UpdateCafe(ctx context.Context, id string, cafe Cafe) (Cafe, err
 			opening_hours = $7,
 			contact_info = $8,
 			updated_at = NOW()
-		WHERE id = $9
+		WHERE id = $9 AND is_active = TRUE
 	`,
 		cafe.CategoryID,
 		cafe.Name,
@@ -230,6 +235,7 @@ func (s *Store) UpdateCafe(ctx context.Context, id string, cafe Cafe) (Cafe, err
 		cafe.ContactInfo,
 		id,
 	)
+
 	if err != nil {
 		return Cafe{}, err
 	}
@@ -245,9 +251,12 @@ func (s *Store) UpdateCafe(ctx context.Context, id string, cafe Cafe) (Cafe, err
 func (s *Store) DeactivateCafe(ctx context.Context, id string) error {
 	result, err := s.DB.Exec(ctx, `
 		UPDATE cafes
-		SET is_active = FALSE, updated_at = NOW()
+		SET
+			is_active = FALSE,
+			updated_at = NOW()
 		WHERE id = $1 AND is_active = TRUE
 	`, id)
+
 	if err != nil {
 		return err
 	}

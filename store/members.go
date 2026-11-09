@@ -7,10 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ErrMemberNotFound is returned when a member does not exist.
 var ErrMemberNotFound = errors.New("member not found")
 
-// Member represents a Cuppie user.
 type Member struct {
 	ID           string  `json:"id"`
 	FullName     string  `json:"full_name"`
@@ -22,36 +20,48 @@ type Member struct {
 	IsActive     bool    `json:"is_active"`
 }
 
-// CreateMember inserts a new member into the database.
+// CreateMember creates a new member account.
 func (s *Store) CreateMember(ctx context.Context, member Member) error {
-	_, err := s.DB.Exec(
-		ctx,
-		`INSERT INTO users (full_name, email, password_hash, role)
-		 VALUES ($1, $2, $3, 'member')`,
+	_, err := s.DB.Exec(ctx, `
+		INSERT INTO users (
+			full_name,
+			email,
+			password_hash,
+			role,
+			avatar_url,
+			bio
+		)
+		VALUES ($1, $2, $3, 'member', $4, $5)
+	`,
 		member.FullName,
 		member.Email,
 		member.PasswordHash,
+		member.AvatarURL,
+		member.Bio,
 	)
 
 	return err
 }
 
-// GetMemberByEmail retrieves an active member by email.
-func (s *Store) GetMemberByEmail(
-	ctx context.Context,
-	email string,
-) (Member, error) {
+// GetMemberByEmail finds a user by email,
+// including inactive accounts.
+// Login checks IsActive after verifying the password.
+func (s *Store) GetMemberByEmail(ctx context.Context, email string) (Member, error) {
 	var member Member
 
-	err := s.DB.QueryRow(
-		ctx,
-		`SELECT id, full_name, email, password_hash, role,
-		        avatar_url, bio, is_active
-		 FROM users
-		 WHERE LOWER(email) = LOWER($1)
-		   AND is_active = TRUE`,
-		email,
-	).Scan(
+	err := s.DB.QueryRow(ctx, `
+		SELECT
+			id,
+			full_name,
+			email,
+			password_hash,
+			role,
+			avatar_url,
+			bio,
+			is_active
+		FROM users
+		WHERE LOWER(email) = LOWER($1)
+	`, email).Scan(
 		&member.ID,
 		&member.FullName,
 		&member.Email,
@@ -65,29 +75,28 @@ func (s *Store) GetMemberByEmail(
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Member{}, ErrMemberNotFound
 	}
-	if err != nil {
-		return Member{}, err
-	}
 
-	return member, nil
+	return member, err
 }
 
-// GetMemberByID retrieves an active member by ID.
-func (s *Store) GetMemberByID(
-	ctx context.Context,
-	id string,
-) (Member, error) {
+// GetMemberByID finds an active member by ID.
+func (s *Store) GetMemberByID(ctx context.Context, id string) (Member, error) {
 	var member Member
 
-	err := s.DB.QueryRow(
-		ctx,
-		`SELECT id, full_name, email, password_hash, role,
-		        avatar_url, bio, is_active
-		 FROM users
-		 WHERE id = $1
-		   AND is_active = TRUE`,
-		id,
-	).Scan(
+	err := s.DB.QueryRow(ctx, `
+		SELECT
+			id,
+			full_name,
+			email,
+			password_hash,
+			role,
+			avatar_url,
+			bio,
+			is_active
+		FROM users
+		WHERE id = $1
+		  AND is_active = TRUE
+	`, id).Scan(
 		&member.ID,
 		&member.FullName,
 		&member.Email,
@@ -101,21 +110,25 @@ func (s *Store) GetMemberByID(
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Member{}, ErrMemberNotFound
 	}
-	if err != nil {
-		return Member{}, err
-	}
 
-	return member, nil
+	return member, err
 }
 
-// GetAllMembers retrieves all member accounts for admin.
+// GetAllMembers returns all user accounts,
+// including admins and inactive accounts.
 func (s *Store) GetAllMembers(ctx context.Context) ([]Member, error) {
 	rows, err := s.DB.Query(ctx, `
-		SELECT id, full_name, email, role,
-		       avatar_url, bio, is_active
+		SELECT
+			id,
+			full_name,
+			email,
+			password_hash,
+			role,
+			avatar_url,
+			bio,
+			is_active
 		FROM users
-		WHERE role = 'member'
-		ORDER BY full_name ASC
+		ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -131,6 +144,7 @@ func (s *Store) GetAllMembers(ctx context.Context) ([]Member, error) {
 			&member.ID,
 			&member.FullName,
 			&member.Email,
+			&member.PasswordHash,
 			&member.Role,
 			&member.AvatarURL,
 			&member.Bio,
@@ -150,22 +164,27 @@ func (s *Store) GetAllMembers(ctx context.Context) ([]Member, error) {
 	return members, nil
 }
 
-// GetMemberByIDForAdmin retrieves a member account for admin.
-func (s *Store) GetMemberByIDForAdmin(
-	ctx context.Context,
-	id string,
-) (Member, error) {
+// GetMemberByIDForAdmin finds any user account by ID.
+func (s *Store) GetMemberByIDForAdmin(ctx context.Context, id string) (Member, error) {
 	var member Member
 
 	err := s.DB.QueryRow(ctx, `
-		SELECT id, full_name, email, role,
-		       avatar_url, bio, is_active
+		SELECT
+			id,
+			full_name,
+			email,
+			password_hash,
+			role,
+			avatar_url,
+			bio,
+			is_active
 		FROM users
-		WHERE id = $1 AND role = 'member'
+		WHERE id = $1
 	`, id).Scan(
 		&member.ID,
 		&member.FullName,
 		&member.Email,
+		&member.PasswordHash,
 		&member.Role,
 		&member.AvatarURL,
 		&member.Bio,
@@ -175,21 +194,18 @@ func (s *Store) GetMemberByIDForAdmin(
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Member{}, ErrMemberNotFound
 	}
-	if err != nil {
-		return Member{}, err
-	}
 
-	return member, nil
+	return member, err
 }
 
-// DeactivateMember deactivates a member account.
+// DeactivateMember deactivates a user account.
 func (s *Store) DeactivateMember(ctx context.Context, id string) error {
-	tag, err := s.DB.Exec(ctx, `
+	result, err := s.DB.Exec(ctx, `
 		UPDATE users
-		SET is_active = FALSE,
-		    updated_at = NOW()
+		SET
+			is_active = FALSE,
+			updated_at = NOW()
 		WHERE id = $1
-		  AND role = 'member'
 		  AND is_active = TRUE
 	`, id)
 
@@ -197,7 +213,7 @@ func (s *Store) DeactivateMember(ctx context.Context, id string) error {
 		return err
 	}
 
-	if tag.RowsAffected() == 0 {
+	if result.RowsAffected() == 0 {
 		return ErrMemberNotFound
 	}
 

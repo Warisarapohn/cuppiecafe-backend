@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 
-# Go build files
+# Go
 *.exe
+*.test
 *.out

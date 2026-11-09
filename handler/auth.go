@@ -110,8 +110,11 @@ type loginRequest struct {
 
 // Login Response
 type loginResponse struct {
-	Message string `json:"message"`
-	Token   string `json:"token"`
+	Message  string `json:"message"`
+	Token    string `json:"token"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
 }
 
 // Login API
@@ -139,7 +142,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find member by email
+	// Find active member by email
 	member, err := h.Store.GetMemberByEmail(r.Context(), req.Email)
 	if err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
@@ -163,7 +166,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	json.NewEncoder(w).Encode(loginResponse{
-		Message: "Login successful",
-		Token:   token,
+		Message:  "Login successful",
+		Token:    token,
+		FullName: member.FullName,
+		Email:    member.Email,
+		Role:     member.Role,
 	})
 }

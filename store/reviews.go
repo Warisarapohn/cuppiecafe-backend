@@ -26,27 +26,31 @@ type Review struct {
 	UpdatedAt        string  `json:"updated_at"`
 }
 
-// GetReviewsByCafeID retrieves reviews of a cafe.
+// GetReviewsByCafeID retrieves all reviews of a cafe.
 func (s *Store) GetReviewsByCafeID(
 	ctx context.Context,
 	cafeID string,
 ) ([]Review, error) {
 	rows, err := s.DB.Query(ctx, `
 		SELECT
-			id,
-			user_id,
-			cafe_id,
-			rating,
-			drink_rating,
-			dessert_rating,
-			atmosphere_rating,
-			service_rating,
-			comment,
-			created_at::text,
-			updated_at::text
-		FROM reviews
-		WHERE cafe_id = $1
-		ORDER BY created_at DESC
+			r.id,
+			r.user_id,
+			r.cafe_id,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'สมาชิก'),
+			COALESCE(NULLIF(c.name, ''), 'ไม่ระบุคาเฟ่'),
+			r.rating,
+			r.drink_rating,
+			r.dessert_rating,
+			r.atmosphere_rating,
+			r.service_rating,
+			r.comment,
+			r.created_at::text,
+			r.updated_at::text
+		FROM reviews r
+		LEFT JOIN users u ON u.id = r.user_id
+		LEFT JOIN cafes c ON c.id = r.cafe_id
+		WHERE r.cafe_id = $1
+		ORDER BY r.created_at DESC
 	`, cafeID)
 
 	if err != nil {
@@ -63,6 +67,8 @@ func (s *Store) GetReviewsByCafeID(
 			&review.ID,
 			&review.UserID,
 			&review.CafeID,
+			&review.MemberName,
+			&review.CafeName,
 			&review.Rating,
 			&review.DrinkRating,
 			&review.DessertRating,
@@ -72,6 +78,7 @@ func (s *Store) GetReviewsByCafeID(
 			&review.CreatedAt,
 			&review.UpdatedAt,
 		)
+
 		if err != nil {
 			return nil, err
 		}
@@ -95,23 +102,29 @@ func (s *Store) GetReviewByID(
 
 	err := s.DB.QueryRow(ctx, `
 		SELECT
-			id,
-			user_id,
-			cafe_id,
-			rating,
-			drink_rating,
-			dessert_rating,
-			atmosphere_rating,
-			service_rating,
-			comment,
-			created_at::text,
-			updated_at::text
-		FROM reviews
-		WHERE id = $1
+			r.id,
+			r.user_id,
+			r.cafe_id,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'สมาชิก'),
+			COALESCE(NULLIF(c.name, ''), 'ไม่ระบุคาเฟ่'),
+			r.rating,
+			r.drink_rating,
+			r.dessert_rating,
+			r.atmosphere_rating,
+			r.service_rating,
+			r.comment,
+			r.created_at::text,
+			r.updated_at::text
+		FROM reviews r
+		LEFT JOIN users u ON u.id = r.user_id
+		LEFT JOIN cafes c ON c.id = r.cafe_id
+		WHERE r.id = $1
 	`, id).Scan(
 		&review.ID,
 		&review.UserID,
 		&review.CafeID,
+		&review.MemberName,
+		&review.CafeName,
 		&review.Rating,
 		&review.DrinkRating,
 		&review.DessertRating,
@@ -202,8 +215,8 @@ func (s *Store) GetAllReviews(
 			r.id,
 			r.user_id,
 			r.cafe_id,
-			COALESCE(NULLIF(u.full_name, ''), u.email, 'สมาชิก') AS member_name,
-			COALESCE(NULLIF(c.name, ''), 'ไม่ระบุคาเฟ่') AS cafe_name,
+			COALESCE(NULLIF(u.full_name, ''), u.email, 'สมาชิก'),
+			COALESCE(NULLIF(c.name, ''), 'ไม่ระบุคาเฟ่'),
 			r.rating,
 			r.drink_rating,
 			r.dessert_rating,
