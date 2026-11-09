@@ -142,20 +142,26 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find active member by email
+	// Find member by email (including inactive accounts)
 	member, err := h.Store.GetMemberByEmail(r.Context(), req.Email)
 	if err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
-	// Check password
+	// Check password first
 	if err := auth.CheckPassword(req.Password, member.PasswordHash); err != nil {
 		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
-	// Generate JWT token
+	// Check account status after password verification
+	if !member.IsActive {
+		http.Error(w, "Account is deactivated", http.StatusForbidden)
+		return
+	}
+
+	// Generate JWT token only for active accounts
 	token, err := h.Issuer.Issue(member.ID, member.Role)
 	if err != nil {
 		http.Error(w, "Could not create token", http.StatusInternalServerError)
